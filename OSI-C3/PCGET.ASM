@@ -363,8 +363,8 @@ RCVSDR:		EQU		$+1			;address of I/O port for the following IN
 MCHAR:	
 		;IN		CONDR
 
-        	LDA    		TTYIDA  		;GET DATA from the ACIA
-        	;ANI     	7FH     		;STRIP PARITY BIT
+        LDA    		TTYIDA  		;GET DATA from the ACIA
+        ;ANI     	7FH     		;STRIP PARITY BIT
 
 		POP		D			;RESTORE DE
 		PUSH		PSW			;CALC CHECKSUM
@@ -398,26 +398,26 @@ MCHAR:
 ;A contains character
 ;C is the running checksum
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-SEND:		PUSH		PSW			;CHECK IF MONITORING OUTPUT
+SEND:	PUSH	PSW			;CHECK IF MONITORING OUTPUT
 		ADD		C			;CALC CKSUM
 		MOV		C,A
 
-SNDSCR:		EQU		$+1			;address of I/O port for the following IN
+SNDSCR:	EQU		$+1			;address of I/O port for the following IN
 SENDW:	
 		;IN		CONCR		old code
-		;ANI		XMTMASK
-		;CPI		XMTRDY
-		;JNZ		SENDW
+		;ANI	XMTMASK
+		;CPI	XMTRDY
+		;JNZ	SENDW
 		
-		LDA     	TTYOSA  			;CHECK CONSOLE OUTPUT
-        	ANI     	TTYOSB 				;STATUS AND LOOP
-        	JZ    		SENDW 				;UNTIL  READY
+		LDA     TTYOSA  		;CHECK CONSOLE OUTPUT
+        ANI     TTYOSB 			;STATUS AND LOOP
+        JZ    	SENDW 			;UNTIL  READY
 		
 		POP		PSW				;GET CHAR
 
-SNDSDR:		EQU		$+1				;address of I/O port for the following IN
-		;OUT		CONDR		old code
-	   	STA     	TTYODA	
+SNDSDR:	EQU		$+1				;address of I/O port for the following IN
+		;OUT	CONDR		old code
+	   	STA     TTYODA	
 		RET
 
 ; console output code from OSILNKS.ASM

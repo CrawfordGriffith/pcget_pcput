@@ -1,8 +1,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;PCPUT -- Send files via XMODEM to a PC
 ;
-;SD Systems SBC-200 version, 4 MHz Z80. Supports built-in
-;console port.
+;Ohio Scientific Challenger III version, 4 MHz Z80. Supports built-in
+;console port.  NOTE: 8080 Code!
 ;
 ;This CP/M program sends a file to a PC via a serial port.
 ;The file transfer uses the XMODEM protocol. 
@@ -12,6 +12,7 @@
 ;
 ;Hacked together by Mike Douglas for the VG Bitstreamer II
 ;Updated by Glitch Works for the SD Systems SBC-200
+; Hacked again by Crawford Griffith for OSI C3
 ;
 ;Glitch Works customization and cleanup is:
 ;
@@ -22,6 +23,7 @@
 ;
 ;Ver	Date	   Desc
 ;---    --------   ----------------------------------------
+;1.0.2	2020-10-22 Changes for OSI-C3 (memory mapped ACIA)
 ;1.0.1  2019-06-07 Customized for the SD Systems SBC-200
 ;
 ;1.0    10/7/15	   Initial version. This code is almost the
@@ -41,6 +43,29 @@ XMTRDY	EQU	1		;VALUE WHEN READY
 RCVMASK	EQU	2		;MASK TO ISOLATE RECEIVE READY BIT
 RCVRDY	EQU	2		;VALUE WHEN READY
 
+;       EQUATES FOR CONSOLE PORT ACIA from OSILNKS.ASM
+CRST    EQU     0F700H  	;RESET ADDRESS
+CRST1   EQU     3       	;MASTER RESET
+CRST2   EQU     10110001B       ;8 BIT WORD LENGTH
+		;               2 STOP BITS CLOCK DEVIDED BY 16
+TTYISA  EQU     0FC00H  	;INPUT STATUS ADDRESS
+TTYISB  EQU     1      		;INPUT STATUS BIT
+TTYOSA  EQU     0FC00H  	;OUTPUT STATUS ADDRESS
+TTYOSB  EQU     2       	;OUTPUT STATUS BIT
+TTYIDA  EQU     0FC01H  	;INPUT DATA ADDRESS
+TTYODA  EQU     0FC01H  	;OUTPUT DATA ADDRESS
+CA6ISA  EQU     0FB05H  	;INPUT STATUS ADDRESS
+CA6OSA  EQU     0FB05H  	;OUTPUT STATUS ADDRESS
+CA6SR   EQU     0FB07H  	;INPUT STATUS REGISTER
+CA6IDA  EQU     0FB03H  	;INPUT DATA ADDRESS
+CA6ODA  EQU     0FB04H  	;OUTPUT DATA ADDRESS
+CSTOP   EQU     13H     	;STOP CHAR
+CSTRT   EQU     11H     	;START CHAR
+CA9OSA  EQU     0F400H 		;LIST STATUS ADDRESS
+CA9OSB  EQU     1       	;OUTPUT STATUS BIT
+CA9ODA  EQU     0F402H  	;OUTPUT DATA ADDRESS
+CA9SR   EQU     0F420H 		;STATUS REGISTER ?
+IOBYTE  EQU     3
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;XMODEM Protocol Equates
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -101,12 +126,13 @@ HAVEFN:	MVI	B,CONDR		;Default to CONSOLE port
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;DOXFER -- Switch to a local stack and start transfer
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-DOXFER:	MOV	A,B		;a=address of serial port to use
-	STA	RCVSDR		;modify IN instruction for data register
-	STA	SNDSDR		;modify OUT instruction for data register
-	INR	A		;a=serial port control register address
-	STA	RCVSCR		;modify IN for control register in RECV
-	STA	SNDSCR		;modify IN for control register in SEND
+DOXFER:	
+	;MOV	A,B		;a=address of serial port to use  OLD CODE - DO NOT SWAP REGISTERS
+	;STA	RCVSDR		;modify IN instruction for data register
+	;STA	SNDSDR		;modify OUT instruction for data register
+	;INR	A		;a=serial port control register address
+	;STA	RCVSCR		;modify IN for control register in RECV
+	;STA	SNDSCR		;modify IN for control register in SEND
 	LXI	H,0		;HL=0
 	DAD	SP		;HL=STACK FROM CP/M
 	SHLD	STACK		;..SAVE IT
@@ -204,7 +230,7 @@ OPEN$FILE:
 	INR	A		;OPEN OK?
 	RNZ			;GOOD OPEN
 	CALL	ERXIT
-	DB	CR,LF,"Can't Open File",CR,LF,'$'
+	DB	CR,LF,'Cant Open File',CR,LF,'$'
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;ERXIT -- Exit and print an error message
@@ -224,17 +250,25 @@ EXIT:	LHLD	STACK		;GET ORIGINAL STACK
 ;
 ;This routine contains code that will be modified at run
 ;time if a non-default port is selected for the transfer.
+;Timeout is in B (number of seconds)
+;Return sets carry if RECV timed out
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-RECV:	PUSH	D		;SAVE
+RECV:	PUSH	D		;Save DE
 MSEC:	LXI	D,248		;63 cycles, 4.032ms/wrap*248=1s (4MHz)
 
-RCVSCR:	EQU	$+1		;address of I/O port for the following IN
-MWTI:	IN	CONCR		;(10)
-	ANI	RCVMASK		;(7)
-	CPI	RCVRDY		;(7)
-	JZ	MCHAR		;(10) GOT CHAR
+RCVSCR:	EQU	$+1		;Address of I/O port for the following IN
+MWTI:	
+	;IN	CONCR		;(10)	OLD CODE
+	;ANI	RCVMASK		;(7)
+	;CPI	RCVRDY		;(7)
+	;JZ	MCHAR		;(10) GOT CHAR
 
-	CPI	0		;(7) No character present, decrement countdown
+	LDA     TTYISA  	;(13)console status check
+       	ANI     TTYISB		;(7) returns 0 if no character
+        JNZ	MCHAR       	;(10) character present, go get it
+
+	CPI	0		;(7) No char present, decrement countdown - cg ADDED
+	CPI	0		;(7) No char present, decrement countdown
 	CPI	0		;(7) waste some time
 	DCR	E		;(5) COUNT DOWN
 	JNZ	MWTI		;(10) FOR TIMEOUT
@@ -243,18 +277,23 @@ MWTI:	IN	CONCR		;(10)
 	DCR	B		;DCR # OF SECONDS
 	JNZ	MSEC
 
-	POP	D		;Receive timeout, restore DE
-	STC			;CARRY SHOWS TIMEOUT
+	POP	D		;Receive timed out, restore DE
+	STC			;Set carry flag to show timeout
 	RET
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;MCHAR -- Process XMODEM character
 ;
 ;This routine contains code that will be modified at run
-;time if a non-default port is selected for the transfer.
+;Returns char in A, with carry cleared
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 RCVSDR:	EQU	$+1		;address of I/O port for the following IN
-MCHAR:	IN	CONDR
+MCHAR:	
+	;IN	CONDR
+
+        LDA    	TTYIDA  	;GET DATA from the ACIA
+        ;ANI     7FH     	;STRIP PARITY BIT
+
 	POP	D		;RESTORE DE
 	PUSH	PSW		;CALC CHECKSUM
 	ADD	C
@@ -268,20 +307,29 @@ MCHAR:	IN	CONDR
 ;
 ;This routine contains code that will be modified at run
 ;time if a non-default port is selected for the transfer.
+;A contains character
+;C is the running checksum
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 SEND:	PUSH	PSW		;CHECK IF MONITORING OUTPUT
 	ADD	C		;CALC CKSUM
 	MOV	C,A
 
 SNDSCR:	EQU	$+1		;address of I/O port for the following IN
-SENDW:	IN	CONCR
-	ANI	XMTMASK
-	CPI	XMTRDY
-	JNZ	SENDW
+SENDW:	
+	;IN	CONCR		old code
+	;ANI	XMTMASK
+	;CPI	XMTRDY
+	;JNZ	SENDW
+		
+	LDA     TTYOSA  	;CHECK CONSOLE OUTPUT
+        ANI     TTYOSB 		;STATUS AND LOOP
+        JZ    	SENDW 		;UNTIL  READY
+		
 	POP	PSW		;GET CHAR
 
 SNDSDR:	EQU	$+1		;address of I/O port for the following IN
-	OUT	CONDR
+	;OUT	CONDR		old code
+	STA     TTYODA	
 	RET
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
