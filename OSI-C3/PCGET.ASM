@@ -1,8 +1,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;PCGET -- Receive files via XMODEM from a PC
 ;
-;SD Systems SBC-200 version, 4 MHz Z80. Supports built-in
-;console port.
+;Ohio Scientific Challenger III version, 4 MHz Z80. Supports built-in
+;console port.  NOTE: 8080 Code!
 ;
 ;This CP/M program receives a file from a PC via a serial 
 ;port and writes it to a file on the CP/M system. The file
@@ -13,6 +13,7 @@
 ;
 ;Hacked together by Mike Douglas for the Horizon Computer
 ;Updated by Glitch Works for the SD Systems SBC-200
+; Hacked again by Crawford Griffith for OSI C3
 ;
 ;Glitch Works customization and cleanup is:
 ;
@@ -23,6 +24,7 @@
 ;
 ;Ver	Date	   Desc
 ;---    --------   ----------------------------------------
+;1.0.2	2020-10-22 Changes for OSI-C3 (memory mapped ACIA)
 ;1.0.1  2019-06-27 Customized for the SD Systems SBC-200
 ;
 ;1.0    10/7/15	   Initial version. This code is almost the
@@ -42,6 +44,30 @@ XMTRDY	EQU	1		;VALUE WHEN READY
 RCVMASK	EQU	2		;MASK TO ISOLATE RECEIVE READY BIT
 RCVRDY	EQU	2		;VALUE WHEN READY
 
+;       EQUATES FOR CONSOLE PORT ACIA from OSILNKS.ASM
+CRST    EQU     0F700H  	;RESET ADDRESS
+CRST1   EQU     3       	;MASTER RESET
+CRST2   EQU     10110001B       ;8 BIT WORD LENGTH
+		;               2 STOP BITS CLOCK DEVIDED BY 16
+TTYISA  EQU     0FC00H  	;INPUT STATUS ADDRESS
+TTYISB  EQU     1      		;INPUT STATUS BIT
+TTYOSA  EQU     0FC00H  	;OUTPUT STATUS ADDRESS
+TTYOSB  EQU     2       	;OUTPUT STATUS BIT
+TTYIDA  EQU     0FC01H  	;INPUT DATA ADDRESS
+TTYODA  EQU     0FC01H  	;OUTPUT DATA ADDRESS
+CA6ISA  EQU     0FB05H  	;INPUT STATUS ADDRESS
+CA6OSA  EQU     0FB05H  	;OUTPUT STATUS ADDRESS
+CA6SR   EQU     0FB07H  	;INPUT STATUS REGISTER
+CA6IDA  EQU     0FB03H  	;INPUT DATA ADDRESS
+CA6ODA  EQU     0FB04H  	;OUTPUT DATA ADDRESS
+CSTOP   EQU     13H     	;STOP CHAR
+CSTRT   EQU     11H     	;START CHAR
+CA9OSA  EQU     0F400H 		;LIST STATUS ADDRESS
+CA9OSB  EQU     1       	;OUTPUT STATUS BIT
+CA9ODA  EQU     0F402H  	;OUTPUT DATA ADDRESS
+CA9SR   EQU     0F420H 		;STATUS REGISTER ?
+IOBYTE  EQU     3
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;XMODEM Protocol Equates
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -56,25 +82,25 @@ CR	EQU	13
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;CP/M 2 BDOS Equates
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-RDCON	EQU	1
-WRCON	EQU	2
-PRINT	EQU	9
-CONST	EQU	11	;CONSOLE STAT
-OPEN	EQU	15	;0FFH=NOT FOUND
-CLOSE	EQU	16	;   "	"
-SRCHF	EQU	17	;   "	"
-SRCHN	EQU	18	;   "	"
-ERASE	EQU	19	;NO RET CODE
-READ	EQU	20	;0=OK, 1=EOF
-WRITE	EQU	21	;0=OK, 1=ERR, 2=?, 0FFH=NO DIR SPC
-MAKE	EQU	22	;0FFH=BAD
-REN	EQU	23	;0FFH=BAD
-STDMA	EQU	26
-BDOS	EQU	5
-REIPL	EQU	0
-FCB	EQU	5CH	;DEFAULT FCB
-PARAM1	EQU	FCB+1	;COMMAND LINE PARAMETER 1 IN FCB
-PARAM2	EQU	PARAM1+16	;COMMAND LINE PARAMETER 2
+RDCON		EQU	1
+WRCON		EQU	2
+PRINT		EQU	9
+CONST		EQU	11		;CONSOLE STAT
+OPEN		EQU	15		;0FFH=NOT FOUND
+CLOSE		EQU	16		;   "	"
+SRCHF		EQU	17		;   "	"
+SRCHN		EQU	18		;   "	"
+ERASE		EQU	19		;NO RET CODE
+READ		EQU	20		;0=OK, 1=EOF
+WRITE		EQU	21		;0=OK, 1=ERR, 2=?, 0FFH=NO DIR SPC
+MAKE		EQU	22		;0FFH=BAD
+REN		EQU	23		;0FFH=BAD
+STDMA		EQU	26
+BDOS		EQU	5
+REIPL		EQU	0
+FCB		EQU	5CH		;DEFAULT FCB
+PARAM1		EQU	FCB+1		;COMMAND LINE PARAMETER 1 IN FCB
+PARAM2		EQU	PARAM1+16	;COMMAND LINE PARAMETER 2
 
 	ORG	100H
 
@@ -87,172 +113,175 @@ PARAM2	EQU	PARAM1+16	;COMMAND LINE PARAMETER 2
 ;
 ;Falls through to DOXFER
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-START:	LDA	PARAM1		;A=1st character of parameter 1
-	CPI	' '		;make sure file name present
-	JNZ	HAVEFN		;yes, have a file name
-	LXI	D,MHELP		;display usage message
-	MVI	C,PRINT
-	CALL	BDOS
-	RET			;return to CPM
+START:		LDA		PARAM1			;A=1st character of parameter 1
+		CPI		' '			;make sure file name present
+		JNZ		HAVEFN			;yes, have a file name
+		LXI		D,MHELP			;display usage message
+		MVI		C,PRINT
+		CALL		BDOS
+		RET					;return to CPM
 
-HAVEFN:	MVI	B,CONDR		;Default to CONSOLE port
-	LXI	D,MSENDC	;CONSOLE port send message
+HAVEFN:		MVI		B,CONDR			;Default to CONSOLE port
+		LXI		D,MSENDC		;CONSOLE port send message
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;DOXFER -- Switch to a local stack and start transfer
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-DOXFER:	MOV	A,B		;a=address of serial port to use
-	STA	RCVSDR		;modify IN instruction for data register
-	STA	SNDSDR		;modify OUT instruction for data register
-	INR	A		;a=serial port control register address
-	STA	RCVSCR		;modify IN for control register in RECV
-	STA	SNDSCR		;modify IN for control register in SEND
-	LXI	H,0		;HL=0
-	DAD	SP		;HL=STACK FROM CP/M
-	SHLD	STACK		;..SAVE IT
-	LXI	SP,STACK	;SP=MY STACK
-	XRA	A
-	STA	SECTNO		;init sector number to zero
-	MVI	C,PRINT		;print the send message
-	CALL	BDOS		;PRINT ID MESSAGE
+DOXFER:	
+		;MOV	A,B				;a=address of serial port to use  GETTING RID OF MULTIPLE SERIAL PORT LOGIC
+		;STA	RCVSDR				;modify IN instruction for data register
+		;STA	SNDSDR				;modify OUT instruction for data register
+		;INR	A				;a=serial port control register address
+		;STA	RCVSCR				;modify IN for control register in RECV
+		;STA	SNDSCR				;modify IN for control register in SEND
+
+
+		LXI		H,0				;HL=0
+		DAD		SP				;HL=STACK FROM CP/M
+		SHLD		STACK				;..SAVE IT
+		LXI		SP,STACK			;SP=MY STACK
+		XRA		A
+		STA		SECTNO				;init sector number to zero
+		MVI		C,PRINT				;print the send message
+		CALL		BDOS				;PRINT ID MESSAGE
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;PURGE -- Consume garbage characters from the line
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-PURGE:	MVI	B,1		;times out after 1 second if no data
-	CALL	RECV
-	JC	RECEIVE$FILE	;line is clear, go receive the file
-	CPI	CTRLC		;exit if abort requested
-	JZ	ABORT
-	JMP	PURGE
+PURGE:		MVI		B,1				;times out after 1 second if no data
+		CALL		RECV
+		JC		RECEIVE$FILE			;line is clear, go receive the file
+		CPI		CTRLC				;exit if abort requested
+		JZ		ABORT
+		JMP		PURGE
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;RECEIVE$FILE -- Receive the file via XMODEM
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 RECEIVE$FILE:
-	CALL	ERASE$OLD$FILE
-	CALL	MAKE$NEW$FILE
-	MVI	A,NAK
-	CALL	SEND		;SEND NAK
+		CALL		ERASE$OLD$FILE
+		CALL		MAKE$NEW$FILE
+		MVI		A,NAK
+		CALL		SEND				;SEND NAK
 
 RECV$LOOP:
 RECV$HDR:
-	MVI	B,3		;3 SEC TIMEOUT
-	CALL	RECV
-	JNC	RHNTO		;NO TIMEOUT
+		MVI		B,3				;3 SEC TIMEOUT
+		CALL		RECV
+		JNC		RHNTO				;NO TIMEOUT
 
 RECV$HDR$TIMEOUT:
-RECV$SECT$ERR:			;PURGE THE LINE OF INPUT CHARS
-	MVI	B,1		;1 SEC W/NO CHARS
-	CALL	RECV
-	JNC	RECV$SECT$ERR 	;LOOP UNTIL SENDER DONE
-	MVI	A,NAK
-	CALL	SEND		;SEND NAK
-	JMP	RECV$HDR
+RECV$SECT$ERR:							;PURGE THE LINE OF INPUT CHARS
+		MVI		B,1				;1 SEC W/NO CHARS
+		CALL		RECV
+		JNC		RECV$SECT$ERR 			;LOOP UNTIL SENDER DONE
+		MVI		A,NAK
+		CALL		SEND				;SEND NAK
+		JMP		RECV$HDR
 
 ;GOT CHAR - MUST BE SOH OR CTRL-C TO ABORT
 
-RHNTO:	CPI	SOH
-	JZ	GOT$SOH
-	CPI	CTRLC		;control-c to abort?
-	JZ	ABORT
-	CPI	EOT
-	JZ	GOT$EOT
-	JMP	RECV$SECT$ERR
+RHNTO:		CPI		SOH
+		JZ		GOT$SOH
+		CPI		CTRLC				;control-c to abort?
+		JZ		ABORT
+		CPI		EOT
+		JZ		GOT$EOT
+		JMP		RECV$SECT$ERR
 
 GOT$SOH:
-	MVI	B,1
-	CALL	RECV
-	JC	RECV$HDR$TIMEOUT
-	MOV	D,A		;D=BLK #
-	MVI	B,1
-	CALL	RECV		;GET CMA'D SECT #
-	JC	RECV$HDR$TIMEOUT
-	CMA
-	CMP	D		;GOOD SECTOR #?
-	JZ	RECV$SECTOR
-	JMP	RECV$SECT$ERR
+		MVI		B,1
+		CALL		RECV
+		JC		RECV$HDR$TIMEOUT
+		MOV		D,A				;D=BLK #
+		MVI		B,1
+		CALL		RECV				;GET CMA'D SECT #
+		JC		RECV$HDR$TIMEOUT
+		CMA
+		CMP		D				;GOOD SECTOR #?
+		JZ		RECV$SECTOR
+		JMP		RECV$SECT$ERR
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;RECV$SECTOR -- Get a sector via XMODEM
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 RECV$SECTOR:
-	MOV	A,D		;GET SECTOR #
-	STA	RSECTNO
-	MVI	C,0		;INIT CKSUM
-	LXI	H,80H		;POINT TO BUFFER
+		MOV		A,D					;GET SECTOR #
+		STA		RSECTNO
+		MVI		C,0					;INIT CKSUM
+		LXI		H,80H					;POINT TO BUFFER
 
 RECV$CHAR:
-	MVI	B,1		;1 SEC TIMEOUT
-	CALL	RECV		;GET CHAR
-	JC	RECV$HDR$TIMEOUT
-	MOV	M,A		;STORE CHAR
-	INR	L		;DONE?
-	JNZ	RECV$CHAR
+		MVI		B,1					;1 SEC TIMEOUT
+		CALL		RECV					;GET CHAR
+		JC		RECV$HDR$TIMEOUT
+		MOV		M,A					;STORE CHAR
+		INR		L					;DONE?
+		JNZ		RECV$CHAR
 
-				;VERIFY CHECKSUM
-	MOV	D,C		;SAVE CHECKSUM
-	MVI	B,1		;TIMEOUT
-	CALL	RECV		;GET CHECKSUM
-	JC	RECV$HDR$TIMEOUT
-	CMP	D		;CHECK
-	JNZ	RECV$SECT$ERR
+			;VERIFY CHECKSUM
+		MOV		D,C					;SAVE CHECKSUM
+		MVI		B,1					;TIMEOUT
+		CALL		RECV					;GET CHECKSUM
+		JC		RECV$HDR$TIMEOUT
+		CMP		D					;CHECK
+		JNZ		RECV$SECT$ERR
 
-	LDA	RSECTNO		;GOT A SECTOR, WRITE IF = 1+PREV SECTOR
-	MOV	B,A		;SAVE IT
-	LDA	SECTNO		;GET PREV
-	INR	A		;CALC NEXT SECTOR #
-	CMP	B		;MATCH?
-	JNZ	DO$ACK
+		LDA		RSECTNO					;GOT A SECTOR, WRITE IF = 1+PREV SECTOR
+		MOV		B,A					;SAVE IT
+		LDA		SECTNO					;GET PREV
+		INR		A					;CALC NEXT SECTOR #
+		CMP		B					;MATCH?
+		JNZ		DO$ACK
 
-	LXI	D,FCB		;GOT NEW SECTOR - WRITE IT
-	MVI	C,WRITE
-	CALL	BDOS
-	ORA	A
-	JNZ	WRITE$ERROR
-	LDA	RSECTNO
-	STA	SECTNO		;UPDATE SECTOR #
-DO$ACK:	MVI	A,ACK
-	CALL	SEND
-	JMP	RECV$LOOP
+		LXI		D,FCB					;GOT NEW SECTOR - WRITE IT
+		MVI		C,WRITE
+		CALL		BDOS
+		ORA		A
+		JNZ		WRITE$ERROR
+		LDA		RSECTNO
+		STA		SECTNO					;UPDATE SECTOR #
+DO$ACK:		MVI		A,ACK
+		CALL		SEND
+		JMP		RECV$LOOP
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;WRITE$ERROR -- Print file write error and exit
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 WRITE$ERROR:
-	CALL	ERXIT
-	DB	CR,LF,LF,'Error Writing File',CR,LF,'$'
+		CALL	ERXIT
+		DB	CR,LF,LF,'Error Writing File',CR,LF,'$'
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;GOT$EOT -- Handle end-of-transfer
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 GOT$EOT:
-	MVI	A,ACK		;ACK THE EOT
-	CALL	SEND
-	LXI	D,FCB
-	MVI	C,CLOSE
-	CALL	BDOS
-	INR	A
-	JNZ	XFER$CPLT
-	CALL	ERXIT
-	DB	CR,LF,LF,'Error Closing File',CR,LF,'$'
+		MVI		A,ACK		;ACK THE EOT
+		CALL		SEND
+		LXI		D,FCB
+		MVI		C,CLOSE
+		CALL		BDOS
+		INR		A
+		JNZ		XFER$CPLT
+		CALL		ERXIT
+		DB		CR,LF,LF,'Error Closing File',CR,LF,'$'
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;ERASE$OLD$FILE -- Delete any existing file before transfer
 ;
-;Caution! If the transfer fails, the old file will stilll
+;Caution. If the transfer fails, the old file will still
 ;have been deleted!
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ERASE$OLD$FILE:
-	LXI	D,FCB
-	MVI	C,SRCHF		;SEE IF IT EXISTS
-	CALL	BDOS
-	INR	A		;FOUND?
-	RZ			;NO, RETURN
-ERAY:	LXI	D,FCB
-	MVI	C,ERASE
-	CALL	BDOS
-	RET
+		LXI		D,FCB
+		MVI		C,SRCHF		;SEE IF IT EXISTS
+		CALL		BDOS
+		INR		A			;FOUND?
+		RZ					;NO, RETURN
+ERAY:		LXI		D,FCB
+		MVI		C,ERASE
+		CALL		BDOS
+		RET
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;MAKE$NEW$FILE -- Create a new empty file to write to
 ;
@@ -260,18 +289,18 @@ ERAY:	LXI	D,FCB
 ;since we call ERASE$OLD$FILE first.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 MAKE$NEW$FILE:
-	LXI	D,FCB
-	MVI	C,MAKE
-	CALL	BDOS
-	INR	A		;FF=BAD
-	RNZ			;OPEN OK
+		LXI		D,FCB
+		MVI		C,MAKE
+		CALL		BDOS
+		INR		A			;FF=BAD
+		RNZ					;OPEN OK
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;DIRFUL -- Print directory full error and exit
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 DIRFUL:	CALL	ERXIT
-	DB	CR,LF,LF,"Error - Can't Make File",CR,LF
-	DB	"(directory must be full)",CR,LF,'$'
+		DB		CR,LF,LF,'Error - Cant Make File',CR,LF
+		DB		'(directory must be full)',CR,LF,'$'
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;ERXIT -- Exit and print an error message
@@ -279,56 +308,86 @@ DIRFUL:	CALL	ERXIT
 ;The error message to be printed by this routine should be
 ;a $-terminated string following the call to ERXIT.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-ERXIT:	POP	D		;GET MESSAGE
-	MVI	C,PRINT
-	CALL	BDOS		;PRINT MESSAGE
-EXIT:	LHLD	STACK		;GET ORIGINAL STACK
-	SPHL			;RESTORE IT
-	RET			;Back to CP/M
+ERXIT:		POP		D			;GET MESSAGE
+		MVI		C,PRINT
+		CALL		BDOS			;PRINT MESSAGE
+EXIT:		LHLD		STACK			;GET ORIGINAL STACK
+		SPHL					;RESTORE IT
+		RET					;Back to CP/M
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;RECV -- XMODEM receive routine
 ;
 ;This routine contains code that will be modified at run
 ;time if a non-default port is selected for the transfer.
+;
+;Timeout is in B (number of seconds)
+;Return sets carry if RECV timed out
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-RECV:	PUSH	D		;Save DE
-MSEC:	LXI	D,248		;63 cycles, 4.032ms/wrap*248=1s (4MHz)
+RECV:		PUSH		D			;Save DE
+MSEC:		LXI		D,248			;63 cycles, 4.032ms/wrap*248=1s (4MHz)
 
-RCVSCR:	EQU	$+1		;Address of I/O port for the following IN
-MWTI:	IN	CONCR		;(10)
-	ANI	RCVMASK		;(7)
-	CPI	RCVRDY		;(7)
-	JZ	MCHAR		;(10) GOT CHAR
+RCVSCR:		EQU		$+1			;Address of I/O port for the following IN
+MWTI:	
+		;IN		CONCR		;(10)	OLD CODE
+		;ANI		RCVMASK		;(7)
+		;CPI		RCVRDY		;(7)
+		;JZ		MCHAR		;(10) GOT CHAR
 
-	CPI	0		;(7) No char present, decrement countdown
-	CPI	0		;(7) waste some time
-	DCR	E		;(5) COUNT DOWN
-	JNZ	MWTI		;(10) FOR TIMEOUT
-	DCR	D		;do msb every 256th time
-	JNZ	MWTI
-	DCR	B		;DCR # OF SECONDS
-	JNZ	MSEC
+		LDA     	TTYISA  		;(13)console status check
+       		ANI     	TTYISB			;(7) returns 0 if no character
+        	JNZ		MCHAR       		;(10) character present, go get it
 
-	POP	D		;Receive timed out, restore DE
-	STC			;Set carry flag to show timeout
-	RET
+		CPI		0			;(7) No char present, decrement countdown - cg ADDED
+		CPI		0			;(7) No char present, decrement countdown
+		CPI		0			;(7) waste some time
+		DCR		E			;(5) COUNT DOWN
+		JNZ		MWTI			;(10) FOR TIMEOUT
+		DCR		D			;do msb every 256th time
+		JNZ		MWTI
+		DCR		B			;DCR # OF SECONDS
+		JNZ		MSEC
+
+		POP		D			;Receive timed out, restore DE
+		STC					;Set carry flag to show timeout
+		RET
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;MCHAR -- Process XMODEM character
 ;
 ;This routine contains code that will be modified at run
 ;time if a non-default port is selected for the transfer.
+;Returns char in A, with carry cleared
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-RCVSDR:	EQU	$+1		;address of I/O port for the following IN
-MCHAR:	IN	CONDR
-	POP	D		;RESTORE DE
-	PUSH	PSW		;CALC CHECKSUM
-	ADD	C
-	MOV	C,A
-	POP	PSW
-	ORA	A		;TURN OFF CARRY TO SHOW NO TIMEOUT
-	RET
+RCVSDR:		EQU		$+1			;address of I/O port for the following IN
+MCHAR:	
+		;IN		CONDR
+
+        	LDA    		TTYIDA  		;GET DATA from the ACIA
+        	;ANI     	7FH     		;STRIP PARITY BIT
+
+		POP		D			;RESTORE DE
+		PUSH		PSW			;CALC CHECKSUM
+		ADD		C
+		MOV		C,A
+		POP		PSW
+		ORA		A			;TURN OFF CARRY TO SHOW NO TIMEOUT
+		RET
+
+;; console input code from OSILNKS.ASM
+;TTYSTI  LDA     TTYISA  ;console status check
+;        ANI     TTYISB
+;        RZ              ;return 0 if no character
+;        MVI     A,0FFH  ;else return 0FFH
+;        RET
+;
+;TTYIN   CALL    TTYSTI  ;console read
+;        ADI     01H
+;        JRNZ    TTYIN   ;LOOP TILL READY
+;        LDA     TTYIDA  ;GET DATA
+;        ANI     7FH     ;STRIP PARITY BIT
+;        RET
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -336,34 +395,61 @@ MCHAR:	IN	CONDR
 ;
 ;This routine contains code that will be modified at run
 ;time if a non-default port is selected for the transfer.
+;A contains character
+;C is the running checksum
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-SEND	PUSH	PSW		;CHECK IF MONITORING OUTPUT
-	ADD	C		;CALC CKSUM
-	MOV	C,A
+SEND:		PUSH		PSW			;CHECK IF MONITORING OUTPUT
+		ADD		C			;CALC CKSUM
+		MOV		C,A
 
-SNDSCR	EQU	$+1		;address of I/O port for the following IN
-SENDW	IN	CONCR
-	ANI	XMTMASK
-	CPI	XMTRDY
-	JNZ	SENDW
-	POP	PSW		;GET CHAR
+SNDSCR:		EQU		$+1			;address of I/O port for the following IN
+SENDW:	
+		;IN		CONCR		old code
+		;ANI		XMTMASK
+		;CPI		XMTRDY
+		;JNZ		SENDW
+		
+		LDA     	TTYOSA  			;CHECK CONSOLE OUTPUT
+        	ANI     	TTYOSB 				;STATUS AND LOOP
+        	JZ    		SENDW 				;UNTIL  READY
+		
+		POP		PSW				;GET CHAR
 
-SNDSDR	EQU	$+1		;address of I/O port for the following IN
-	OUT	CONDR
-	RET
+SNDSDR:		EQU		$+1				;address of I/O port for the following IN
+		;OUT		CONDR		old code
+	   	STA     	TTYODA	
+		RET
+
+; console output code from OSILNKS.ASM
+;TTYOUT: ;CONSOLE CHARACTER OUTPUT FROM REGISTER C
+;TTYOUTS CALL    TTYSTI  ;Console status input
+;        ADI     01H
+;        JRNZ    TTYOT2
+;        LDA     TTYIDA  ;IF STOP CHAR IS TYPED
+;        CPI     CSTOP   ;THEN WAIT
+;        JRNZ    TTYOT2  ;IN LOOP UNTIL START CHAR
+;TTYOTW  CALL    TTYSTI  ;WAIT FOR INPUT OF ANY CHAR
+;        ADI     01H
+;        JRNZ    TTYOTW
+;TTYOT2  LDA     TTYOSA  ;CHECK CONSOLE OUTPUT
+;        ANI     TTYOSB  ;STATUS AND LOOP
+;        JRZ     TTYOUTS ;UNTIL  READY
+;        MOV     A,C     ;GET TO ACCUMULATOR
+;        STA     TTYODA
+;        RET
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;XFER$CPLT -- XMODEM transfer done, clean up
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 XFER$CPLT:
-	CALL	ERXIT
-	DB	CR,LF,LF,'Transfer Complete',CR,LF,'$'
+		CALL	ERXIT
+		DB	CR,LF,LF,'Transfer Complete',CR,LF,'$'
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;ABORT -- Exit from a user abort
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-ABORT:	call	ERXIT
-	db	CR,LF,LF,'Transfer Aborted',CR,LF,'$'
+ABORT:		call	ERXIT
+		db	CR,LF,LF,'Transfer Aborted',CR,LF,'$'
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;Message Strings
