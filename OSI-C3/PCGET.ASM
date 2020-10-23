@@ -38,27 +38,27 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;       EQUATES FOR CONSOLE PORT ACIA from OSILNKS.ASM
-CRST    EQU     0F700H  			;RESET ADDRESS
-CRST1   EQU     3       			;MASTER RESET
-CRST2	EQU     10110001B			;8 	BIT WORD LENGTH
-									;2 STOP BITS CLOCK DEVIDED BY 16
-TTYISA	EQU     0FC00H  			;INPUT STATUS ADDRESS
-TTYISB	EQU     1      				;INPUT STATUS BIT
-TTYOSA	EQU     0FC00H  			;OUTPUT STATUS ADDRESS
-TTYOSB	EQU     2       			;OUTPUT STATUS BIT
-TTYIDA  EQU     0FC01H  			;INPUT DATA ADDRESS
-TTYODA  EQU     0FC01H  			;OUTPUT DATA ADDRESS
-CA6ISA  EQU     0FB05H  			;INPUT STATUS ADDRESS
-CA6OSA  EQU     0FB05H  			;OUTPUT STATUS ADDRESS
-CA6SR   EQU     0FB07H  			;INPUT STATUS REGISTER
-CA6IDA  EQU     0FB03H  			;INPUT DATA ADDRESS
-CA6ODA  EQU     0FB04H  			;OUTPUT DATA ADDRESS
-CSTOP   EQU     13H     			;STOP CHAR
-CSTRT   EQU     11H     			;START CHAR
-CA9OSA  EQU     0F400H 				;LIST STATUS ADDRESS
-CA9OSB  EQU     1       			;OUTPUT STATUS BIT
-CA9ODA  EQU     0F402H  			;OUTPUT DATA ADDRESS
-CA9SR   EQU     0F420H 				;STATUS REGISTER ?
+CRST    EQU     0F700H  		;RESET ADDRESS
+CRST1   EQU     3       		;MASTER RESET
+CRST2	EQU     10110001B		;8 	BIT WORD LENGTH
+								;2 STOP BITS CLOCK DEVIDED BY 16
+TTYISA	EQU     0FC00H  		;INPUT STATUS ADDRESS
+TTYISB	EQU     1      			;INPUT STATUS BIT
+TTYOSA	EQU     0FC00H  		;OUTPUT STATUS ADDRESS
+TTYOSB	EQU     2       		;OUTPUT STATUS BIT
+TTYIDA  EQU     0FC01H  		;INPUT DATA ADDRESS
+TTYODA  EQU     0FC01H  		;OUTPUT DATA ADDRESS
+CA6ISA  EQU     0FB05H  		;INPUT STATUS ADDRESS
+CA6OSA  EQU     0FB05H  		;OUTPUT STATUS ADDRESS
+CA6SR   EQU     0FB07H  		;INPUT STATUS REGISTER
+CA6IDA  EQU     0FB03H  		;INPUT DATA ADDRESS
+CA6ODA  EQU     0FB04H  		;OUTPUT DATA ADDRESS
+CSTOP   EQU     13H     		;STOP CHAR
+CSTRT   EQU     11H     		;START CHAR
+CA9OSA  EQU     0F400H 			;LIST STATUS ADDRESS
+CA9OSB  EQU     1       		;OUTPUT STATUS BIT
+CA9ODA  EQU     0F402H  		;OUTPUT DATA ADDRESS
+CA9SR   EQU     0F420H 			;STATUS REGISTER ?
 IOBYTE  EQU     3
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -78,22 +78,22 @@ CR		EQU		13
 RDCON	EQU		1
 WRCON	EQU		2
 PRINT	EQU		9
-CONST	EQU		11					;CONSOLE STAT
-OPEN	EQU		15					;0FFH=NOT FOUND
-CLOSE	EQU		16					;   "	"
-SRCHF	EQU		17					;   "	"
-SRCHN	EQU		18					;   "	"
-ERASE	EQU		19					;NO RET CODE
-READ	EQU		20					;0=OK, 1=EOF
-WRITE	EQU		21					;0=OK, 1=ERR, 2=?, 0FFH=NO DIR SPC
-MAKE	EQU		22					;0FFH=BAD
-REN		EQU		23					;0FFH=BAD
+CONST	EQU		11				;CONSOLE STAT
+OPEN	EQU		15				;0FFH=NOT FOUND
+CLOSE	EQU		16				;   "	"
+SRCHF	EQU		17				;   "	"
+SRCHN	EQU		18				;   "	"
+ERASE	EQU		19				;NO RET CODE
+READ	EQU		20				;0=OK, 1=EOF
+WRITE	EQU		21				;0=OK, 1=ERR, 2=?, 0FFH=NO DIR SPC
+MAKE	EQU		22				;0FFH=BAD
+REN		EQU		23				;0FFH=BAD
 STDMA	EQU		26
 BDOS	EQU		5
 REIPL	EQU		0
-FCB		EQU		5CH					;DEFAULT FCB
-PARAM1	EQU		FCB+1				;COMMAND LINE PARAMETER 1 IN FCB
-PARAM2	EQU		PARAM1+16			;COMMAND LINE PARAMETER 2
+FCB		EQU		5CH				;DEFAULT FCB
+PARAM1	EQU		FCB+1			;COMMAND LINE PARAMETER 1 IN FCB
+PARAM2	EQU		PARAM1+16		;COMMAND LINE PARAMETER 2
 
 	ORG	100H
 
@@ -106,37 +106,36 @@ PARAM2	EQU		PARAM1+16			;COMMAND LINE PARAMETER 2
 ;
 ;Falls through to DOXFER
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-START:	LDA		PARAM1				;A=1st character of parameter 1
-		CPI		' '					;make sure file name present
-		JNZ		HAVEFN				;yes, have a file name
-		LXI		D,MHELP				;display usage message
+START:	LDA		PARAM1			;A=1st character of parameter 1
+		CPI		' '				;make sure file name present
+		JNZ		HAVEFN			;yes, have a file name
+		LXI		D,MHELP			;display usage message
 		MVI		C,PRINT
 		CALL	BDOS
-		RET							;return to CPM
+		RET						;return to CPM
 
-HAVEFN:	MVI		B,CONDR				;Default to CONSOLE port
-		LXI		D,MSENDC			;CONSOLE port send message
+HAVEFN:	LXI		D,MSENDC		;CONSOLE port send message
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;DOXFER -- Switch to a local stack and start transfer
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 DOXFER:	
-		LXI		H,0					;HL=0
-		DAD		SP					;HL=STACK FROM CP/M
-		SHLD	STACK				;..SAVE IT
-		LXI		SP,STACK			;SP=MY STACK
+		LXI		H,0				;HL=0
+		DAD		SP				;HL=STACK FROM CP/M
+		SHLD	STACK			;..SAVE IT
+		LXI		SP,STACK		;SP=MY STACK
 		XRA		A
-		STA		SECTNO				;init sector number to zero
-		MVI		C,PRINT				;print the send message
-		CALL	BDOS				;PRINT ID MESSAGE
+		STA		SECTNO			;init sector number to zero
+		MVI		C,PRINT			;print the send message
+		CALL	BDOS			;PRINT ID MESSAGE
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;PURGE -- Consume garbage characters from the line
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-PURGE:	MVI		B,1					;times out after 1 second if no data
+PURGE:	MVI		B,1				;times out after 1 second if no data
 		CALL	RECV
-		JC		RECEIVE$FILE		;line is clear, go receive the file
-		CPI		CTRLC				;exit if abort requested
+		JC		RECEIVE$FILE	;line is clear, go receive the file
+		CPI		CTRLC			;exit if abort requested
 		JZ		ABORT
 		JMP		PURGE
 
@@ -147,28 +146,28 @@ RECEIVE$FILE:
 		CALL	ERASE$OLD$FILE
 		CALL	MAKE$NEW$FILE
 		MVI		A,NAK
-		CALL	SEND				;SEND NAK
+		CALL	SEND			;SEND NAK
 
 RECV$LOOP:
 RECV$HDR:
-		MVI		B,3					;3 SEC TIMEOUT
+		MVI		B,3				;3 SEC TIMEOUT
 		CALL	RECV
-		JNC		RHNTO				;NO TIMEOUT
+		JNC		RHNTO			;NO TIMEOUT
 
 RECV$HDR$TIMEOUT:
-RECV$SECT$ERR:						;PURGE THE LINE OF INPUT CHARS
-		MVI		B,1					;1 SEC W/NO CHARS
+RECV$SECT$ERR:					;PURGE THE LINE OF INPUT CHARS
+		MVI		B,1				;1 SEC W/NO CHARS
 		CALL	RECV
-		JNC		RECV$SECT$ERR 		;LOOP UNTIL SENDER DONE
+		JNC		RECV$SECT$ERR 	;LOOP UNTIL SENDER DONE
 		MVI		A,NAK
-		CALL	SEND				;SEND NAK
+		CALL	SEND			;SEND NAK
 		JMP		RECV$HDR
 
 ;GOT CHAR - MUST BE SOH OR CTRL-C TO ABORT
 
 RHNTO:	CPI		SOH
 		JZ		GOT$SOH
-		CPI		CTRLC				;control-c to abort?
+		CPI		CTRLC			;control-c to abort?
 		JZ		ABORT
 		CPI		EOT
 		JZ		GOT$EOT
@@ -178,12 +177,12 @@ GOT$SOH:
 		MVI		B,1
 		CALL	RECV
 		JC		RECV$HDR$TIMEOUT
-		MOV		D,A					;D=BLK #
+		MOV		D,A				;D=BLK #
 		MVI		B,1
-		CALL	RECV				;GET CMA'D SECT #
+		CALL	RECV			;GET CMA'D SECT #
 		JC		RECV$HDR$TIMEOUT
 		CMA
-		CMP		D					;GOOD SECTOR #?
+		CMP		D				;GOOD SECTOR #?
 		JZ		RECV$SECTOR
 		JMP		RECV$SECT$ERR
 
@@ -191,41 +190,41 @@ GOT$SOH:
 ;RECV$SECTOR -- Get a sector via XMODEM
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 RECV$SECTOR:
-		MOV		A,D					;GET SECTOR #
+		MOV		A,D				;GET SECTOR #
 		STA		RSECTNO
-		MVI		C,0					;INIT CKSUM
-		LXI		H,80H				;POINT TO BUFFER
+		MVI		C,0				;INIT CKSUM
+		LXI		H,80H			;POINT TO BUFFER
 
 RECV$CHAR:
-		MVI		B,1					;1 SEC TIMEOUT
-		CALL	RECV				;GET CHAR
+		MVI		B,1				;1 SEC TIMEOUT
+		CALL	RECV			;GET CHAR
 		JC		RECV$HDR$TIMEOUT
-		MOV		M,A					;STORE CHAR
-		INR		L					;DONE?
+		MOV		M,A				;STORE CHAR
+		INR		L				;DONE?
 		JNZ		RECV$CHAR
 
-									;VERIFY CHECKSUM
-		MOV		D,C					;SAVE CHECKSUM
-		MVI		B,1					;TIMEOUT
-		CALL	RECV				;GET CHECKSUM
+								;VERIFY CHECKSUM
+		MOV		D,C				;SAVE CHECKSUM
+		MVI		B,1				;TIMEOUT
+		CALL	RECV			;GET CHECKSUM
 		JC		RECV$HDR$TIMEOUT
-		CMP		D					;CHECK
+		CMP		D				;CHECK
 		JNZ		RECV$SECT$ERR
 
-		LDA		RSECTNO				;GOT A SECTOR, WRITE IF = 1+PREV SECTOR
-		MOV		B,A					;SAVE IT
-		LDA		SECTNO				;GET PREV
-		INR		A					;CALC NEXT SECTOR #
-		CMP		B					;MATCH?
+		LDA		RSECTNO			;GOT A SECTOR, WRITE IF = 1+PREV SECTOR
+		MOV		B,A				;SAVE IT
+		LDA		SECTNO			;GET PREV
+		INR		A				;CALC NEXT SECTOR #
+		CMP		B				;MATCH?
 		JNZ		DO$ACK
 
-		LXI		D,FCB				;GOT NEW SECTOR - WRITE IT
+		LXI		D,FCB			;GOT NEW SECTOR - WRITE IT
 		MVI		C,WRITE
 		CALL	BDOS
 		ORA		A
 		JNZ		WRITE$ERROR
 		LDA		RSECTNO
-		STA		SECTNO				;UPDATE SECTOR #
+		STA		SECTNO			;UPDATE SECTOR #
 DO$ACK:	MVI		A,ACK
 		CALL	SEND
 		JMP		RECV$LOOP
@@ -241,7 +240,7 @@ WRITE$ERROR:
 ;GOT$EOT -- Handle end-of-transfer
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 GOT$EOT:
-		MVI		A,ACK				;ACK THE EOT
+		MVI		A,ACK			;ACK THE EOT
 		CALL	SEND
 		LXI		D,FCB
 		MVI		C,CLOSE
@@ -259,10 +258,10 @@ GOT$EOT:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ERASE$OLD$FILE:
 		LXI		D,FCB
-		MVI		C,SRCHF				;SEE IF IT EXISTS
+		MVI		C,SRCHF			;SEE IF IT EXISTS
 		CALL	BDOS
-		INR		A					;FOUND?
-		RZ							;NO, RETURN
+		INR		A				;FOUND?
+		RZ						;NO, RETURN
 ERAY:	LXI		D,FCB
 		MVI		C,ERASE
 		CALL	BDOS
@@ -277,8 +276,8 @@ MAKE$NEW$FILE:
 		LXI		D,FCB
 		MVI		C,MAKE
 		CALL	BDOS
-		INR		A					;FF=BAD
-		RNZ							;OPEN OK
+		INR		A				;FF=BAD
+		RNZ						;OPEN OK
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;DIRFUL -- Print directory full error and exit
@@ -293,12 +292,12 @@ DIRFUL:	CALL	ERXIT
 ;The error message to be printed by this routine should be
 ;a $-terminated string following the call to ERXIT.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-ERXIT:	POP		D					;GET MESSAGE
+ERXIT:	POP		D				;GET MESSAGE
 		MVI		C,PRINT
-		CALL	BDOS				;PRINT MESSAGE
-EXIT:	LHLD	STACK				;GET ORIGINAL STACK
-		SPHL						;RESTORE IT
-		RET							;Back to CP/M
+		CALL	BDOS			;PRINT MESSAGE
+EXIT:	LHLD	STACK			;GET ORIGINAL STACK
+		SPHL					;RESTORE IT
+		RET						;Back to CP/M
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;RECV -- XMODEM receive routine
@@ -309,27 +308,27 @@ EXIT:	LHLD	STACK				;GET ORIGINAL STACK
 ;Timeout is in B (number of seconds)
 ;Return sets carry if RECV timed out
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-RECV:	PUSH	D					;Save DE
-MSEC:	LXI		D,248				;63 cycles, 4.032ms/wrap*248=1s (4MHz)
+RECV:	PUSH	D				;Save DE
+MSEC:	LXI		D,248			;63 cycles, 4.032ms/wrap*248=1s (4MHz)
 
-RCVSCR:	EQU		$+1					;Address of I/O port for the following IN
+RCVSCR:	EQU		$+1				;Address of I/O port for the following IN
 MWTI:	
-		LDA     TTYISA  			;(13)console status check
-       	ANI    	TTYISB				;(7) returns 0 if no character
-        JNZ		MCHAR       		;(10) character present, go get it
+		LDA     TTYISA  		;(13)console status check
+       	ANI    	TTYISB			;(7) returns 0 if no character
+        JNZ		MCHAR       	;(10) character present, go get it
 
-		CPI		0					;(7) No char present, decrement countdown - cg ADDED
-		CPI		0					;(7) No char present, decrement countdown
-		CPI		0					;(7) waste some time
-		DCR		E					;(5) COUNT DOWN
-		JNZ		MWTI				;(10) FOR TIMEOUT
-		DCR		D					;do msb every 256th time
+		CPI		0				;(7) No char present, decrement countdown - cg ADDED
+		CPI		0				;(7) No char present, decrement countdown
+		CPI		0				;(7) waste some time
+		DCR		E				;(5) COUNT DOWN
+		JNZ		MWTI			;(10) FOR TIMEOUT
+		DCR		D				;do msb every 256th time
 		JNZ		MWTI
-		DCR		B					;DCR # OF SECONDS
+		DCR		B				;DCR # OF SECONDS
 		JNZ		MSEC
 
-		POP		D					;Receive timed out, restore DE
-		STC							;Set carry flag to show timeout
+		POP		D				;Receive timed out, restore DE
+		STC						;Set carry flag to show timeout
 		RET
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -339,16 +338,16 @@ MWTI:
 ;time if a non-default port is selected for the transfer.
 ;Returns char in A, with carry cleared
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-RCVSDR:	EQU		$+1					;address of I/O port for the following IN - UNUSED
+RCVSDR:	EQU		$+1				;address of I/O port for the following IN - UNUSED
 MCHAR:	
-        LDA    	TTYIDA  			;GET DATA from the ACIA
+        LDA    	TTYIDA  		;GET DATA from the ACIA
 
-		POP		D					;RESTORE DE
-		PUSH	PSW					;CALC CHECKSUM
+		POP		D				;RESTORE DE
+		PUSH	PSW				;CALC CHECKSUM
 		ADD		C
 		MOV		C,A
 		POP		PSW
-		ORA		A					;TURN OFF CARRY TO SHOW NO TIMEOUT
+		ORA		A				;TURN OFF CARRY TO SHOW NO TIMEOUT
 		RET
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -359,19 +358,19 @@ MCHAR:
 ;A contains character
 ;C is the running checksum
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-SEND:	PUSH	PSW					;CHECK IF MONITORING OUTPUT
-		ADD		C					;CALC CKSUM
+SEND:	PUSH	PSW				;CHECK IF MONITORING OUTPUT
+		ADD		C				;CALC CKSUM
 		MOV		C,A
 
-SNDSCR:	EQU		$+1					;address of I/O port for the following IN
+SNDSCR:	EQU		$+1				;address of I/O port for the following IN
 SENDW:			
-		LDA     TTYOSA  			;CHECK CONSOLE OUTPUT
-        ANI     TTYOSB 				;STATUS AND LOOP
-        JZ    	SENDW 				;UNTIL  READY
+		LDA     TTYOSA  		;CHECK CONSOLE OUTPUT
+        ANI     TTYOSB 			;STATUS AND LOOP
+        JZ    	SENDW 			;UNTIL  READY
 		
-		POP		PSW					;GET CHAR
+		POP		PSW				;GET CHAR
 
-SNDSDR:	EQU		$+1					;address of I/O port for the following IN
+SNDSDR:	EQU		$+1				;address of I/O port for the following IN
 	   	STA     TTYODA	
 		RET
 
@@ -401,9 +400,9 @@ MHELP:	DB		CR,LF,'PCGET v1.0.2 for OSI Challenger III',CR,LF,LF
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;Variables and Storage Defines
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-		DS		40					;STACK AREA
-STACK	DS		2					;STACK POINTER
-RSECTNO	DS		1					;RECEIVED SECTOR NUMBER
-SECTNO	DS		1					;CURRENT SECTOR NUMBER
+		DS		40				;STACK AREA
+STACK	DS		2				;STACK POINTER
+RSECTNO	DS		1				;RECEIVED SECTOR NUMBER
+SECTNO	DS		1				;CURRENT SECTOR NUMBER
 
 	END

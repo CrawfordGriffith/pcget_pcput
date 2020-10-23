@@ -112,8 +112,7 @@ START:	LDA		PARAM1		;A=1st character of parameter 1
 		CALL	BDOS
 		RET					;return to CPM
 
-HAVEFN:	MVI		B,CONDR		;Default to CONSOLE port
-		LXI		D,MRCVC		;CONSOLE port send message
+HAVEFN:	LXI		D,MRCVC		;CONSOLE port send message
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;DOXFER -- Switch to a local stack and start transfer
